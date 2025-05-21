@@ -17,7 +17,7 @@ const WhisperStream: React.FC = () => {
   const [subTitle, setSubTitle] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const speekNumber = useRef(1);
+  const speekNumber = useRef(3);
 
   const startRecording = async () => {
     const ws = new WebSocket("ws://localhost:8765");
@@ -35,9 +35,7 @@ const WhisperStream: React.FC = () => {
       const text = typeof event.data === "string" ? event.data : "";
       //setTranscript((prev) => prev + text);
       try {
-        let data = JSON.parse(text); // ← 將 JSON 字串轉為 JS 物件
-        
-
+        const data = JSON.parse(text); // ← 將 JSON 字串轉為 JS 物件
 
         console.log("語音辨識結果物件:", data);
 
@@ -57,7 +55,7 @@ const WhisperStream: React.FC = () => {
                 viseme.length > 0 ? ((end - start) / viseme.length) * 1000 : 10
               );
               setText(word);
-              setViseme(viseme.length > 0 ? viseme : ["viseme_sil"]);
+              setViseme(viseme);
             },
             onLastViseme: (viseme, word, start, end) => {
               console.log("onLastViseme:", viseme, word, start, end);
