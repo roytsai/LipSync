@@ -1,0 +1,11 @@
+# 假設你下載的工具路徑是 ~/Downloads/FBX2glTF-darwin-x64
+chmod +x ~/Downloads/FBX2glTF-darwin-x64
+xattr -d com.apple.quarantine ~/Downloads/FBX2glTF-darwin-x64
+
+~/Downloads/FBX2glTF-darwin-x64 --help
+
+
+sudo {PATH to FBX2glTF-darwin-x64} {Path to Fbx} --binary
+
+
+
