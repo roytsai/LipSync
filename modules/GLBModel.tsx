@@ -168,17 +168,15 @@ export default function FaceModel({
         }
         const filtered = viseme.filter((item) => item !== "");
         if (filtered.length > 0) {
-          console.log(filtered);
           currentViseme.current = filtered; //[firstNonEmpty!];
           currentIndex.current = 0;
         }
         return;
       }
-    
+
       if (standTalk.current && url == "/models/Sage_cc4_model_idle01.glb") {
         standTalk.current.play();
       }
-
       const utterance = new SpeechSynthesisUtterance(text);
       const lang = "zh-TW"; //"en-US"
       utterance.lang = lang;
@@ -187,13 +185,12 @@ export default function FaceModel({
       if (voice) utterance.voice = voice;
       utterance.rate = 1;
       const words = text.toUpperCase().split("");
-  
+
       utterance.onboundary = async (event) => {
         //const word = words[(event.charIndex, event.charLength)];
         const start = event.charIndex;
         const end = event.charIndex + event.charLength;
         const word = text.slice(start, end);
-        console.log('word:'+word);
         if (!word) return;
         if (setSubtitle) {
           setSubtitle(text.slice(0, end));
@@ -390,16 +387,14 @@ export default function FaceModel({
             influences[i] = 0;
           }
       }
-  
+
       //console.log("所有 morph target 名稱：", Object.keys(morphDict.current));
       // 設定當前 viseme
 
       const viseme = currentViseme.current[currentIndex.current];
-      console.log("viseme:"+viseme);
-      
       const index = morphDict.current[viseme];
       if (index !== undefined) {
-        influences[index] = 0.35;
+        influences[index] = 0.7 / currentViseme.current.length;
       } else {
         console.warn(`找不到 viseme "${viseme}" 的 morph target`);
       }
@@ -408,6 +403,16 @@ export default function FaceModel({
       }
       // currentIndex.current =
       //   (currentIndex.current + 1) % currentViseme.current.length;
+    } else if (
+      elapsedTime.current >= 150 &&
+      currentViseme.current &&
+      currentIndex.current === currentViseme.current.length - 1
+    ) {
+      currentViseme.current = null;
+      const influences = mesh.current.morphTargetInfluences!;
+      for (let i = 0; i < influences.length; i++) {
+        influences[i] = 0;
+      }
     }
   });
 
