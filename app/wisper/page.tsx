@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import WhisperStream from "@/modules/WhisperStream";
+import WhisperStream from "@/feature/wisper/modules/WhisperStream";
 
 function Page() {
   return (

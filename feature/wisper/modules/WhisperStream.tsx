@@ -1,7 +1,7 @@
 import { Canvas } from "@react-three/fiber";
 import React, { useEffect, useRef, useState } from "react";
-import GLBModel from "./GLBModel";
-import CameraScene from "./CameraScene";
+import GLBModel from "../../../modules/GLBModel";
+import CameraScene from "../../../modules/CameraScene";
 import { VisemeUtterance } from "@/class/VisemeUtterance";
 
 const WhisperStream: React.FC = () => {
@@ -23,11 +23,10 @@ const WhisperStream: React.FC = () => {
     const ws = new WebSocket("ws://localhost:8765");
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
-      
+
     ws.onopen = () => {
       wsRef.current!.send(
-        `/mnt/d/workspace_lip_sync/lip_sync0520/lip_sync/public/idle_3.wav`
-        // `/mnt/d/workspace_lip_sync/lip_sync0520/lip_sync/public/idle_${speekNumber.current}.wav`
+        `/Users/irobot13/Gary/lip_sync_test/lip_sync/public/idle_${speekNumber.current}.wav`
       );
     };
 
@@ -66,7 +65,7 @@ const WhisperStream: React.FC = () => {
                 setViseme([]);
                 setTranscript("");
                 stopRecording();
-              }, 50);
+              }, 200);
             },
             onEnd: () => {
               console.log("onEnd:");
@@ -87,7 +86,7 @@ const WhisperStream: React.FC = () => {
       } else {
         speekNumber.current = speekNumber.current + 1;
       }
-      speekNumber.current = 3;
+      //speekNumber.current = 3;
     };
 
     setIsRecording(true);
