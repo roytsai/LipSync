@@ -17,7 +17,7 @@ const WhisperStream: React.FC = () => {
   const [subTitle, setSubTitle] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const speekNumber = useRef(3);
+  const speekNumber = useRef(2);
 
   const startRecording = async () => {
     const ws = new WebSocket("ws://localhost:8765");
@@ -25,9 +25,12 @@ const WhisperStream: React.FC = () => {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      wsRef.current!.send(
-        `/Users/irobot13/Gary/lip_sync_test/lip_sync/public/idle_${speekNumber.current}.wav`
-      );
+      const dict = {
+        method: "whisper",
+        audio_path: `/Users/irobot13/Gary/lip_sync_test/lip_sync/public/idle_${speekNumber.current}.wav`,
+        text: "明天台北市會不會下雨",
+      };
+      wsRef.current!.send(JSON.stringify(dict));
     };
 
     ws.onmessage = (event) => {
@@ -86,7 +89,7 @@ const WhisperStream: React.FC = () => {
       } else {
         speekNumber.current = speekNumber.current + 1;
       }
-      //speekNumber.current = 3;
+      speekNumber.current = 2;
     };
 
     setIsRecording(true);

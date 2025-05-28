@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import websockets
 import tempfile
@@ -6,6 +7,7 @@ import wave
 import os
 import torch
 import whisperx
+import requests
 
 # === 載入 WhisperX 模型（支援中文、支援 large-v2 模型）===
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -14,6 +16,19 @@ model = whisperx.load_model(
     device=device,
     compute_type="float16" if device == "cuda" else "float32"
 )
+
+def align_word(test_url,buff,text):
+    try:
+        audio_base64 = base64.b64encode(buff).decode('utf-8')
+        data = {"audio_buffer": audio_base64, "input_text": text}
+        url = test_url + "/align_word"
+        response = requests.post(url, json=data, timeout=(5))
+        result_json = response.json()
+        print("ASR result: ", result_json)
+        return result_json
+    except Exception as e:
+        print(e)
+        return None
 
 # === 處理來自前端的 WebSocket 音訊串流 ===
 async def handle_connection(websocket):
@@ -51,16 +66,31 @@ async def handle_connection(websocket):
                     buffer.clear()
             elif isinstance(message, str):
                 print("🔍 Running WhisperX on: ", message)
+                data = json.loads(message)
                 try:
-                    audio_path = message
-                    result = model.transcribe(audio_path, language="zh")
-                    # Step 2: 載入對齊模型
-                    model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
-                    aligned_result = whisperx.align(result["segments"], model_a, metadata, audio_path, device)
-                    print("📝 result: ", result)
-                    print("📝 aligned_result: ", aligned_result)
+                    audio_path = data.get("audio_path")
+                    method = data.get("method")
+                    if(method == "whisper"):
+                        result = model.transcribe(audio_path, language="zh")
+                        # Step 2: 載入對齊模型
+                        model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+                        aligned_result = whisperx.align(result["segments"], model_a, metadata, audio_path, device)
+                        print("📝 result: ", result)
+                        print("📝 aligned_result: ", aligned_result)
+                        # json_string = json.dumps(aligned_result, ensure_ascii=False)
+                        # await websocket.send(json_string)
+                    elif (method == "asr"):
+                        fp = wave.open(audio_path, 'rb')
+                        params = fp.getparams()
+                        nchannels, sampwidth, framerate, nframes = params[:4]
+                        buff = fp.readframes(nframes)
+                        fp.close()
+                        test_url = "https://dswsdev.asus.com/restasr"
+                        text = data.get("text")
+                        aligned_result = align_word(test_url,buff,text)
+
                     json_string = json.dumps(aligned_result, ensure_ascii=False)
-                    await websocket.send(json_string)
+                    await websocket.send(json_string)    
                 except Exception as e:
                     print("❌ WhisperX error:", e)
                     await websocket.send("辨識失敗：" + str(e))

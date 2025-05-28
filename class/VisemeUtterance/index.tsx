@@ -89,7 +89,7 @@ export class VisemeUtterance {
         const seg = this.wordSegments[i];
         if (!this.triggered.has(i) && currentTime >= seg.start) {
           const pinyins = textToPinyin(seg.word);
-          console.log("pinyins: ", pinyins);
+          //console.log("pinyins: ", pinyins);
           let phonemes = pinyins
             .map((p) => pinyinToArpabet(p) ?? "")
             .join(" ")
@@ -102,9 +102,8 @@ export class VisemeUtterance {
             const basePhoneme = p.replace(/[0-9]/g, ""); // 移除重音符號
             return phonemeToViseme[basePhoneme] ?? "";
           });
-
+          console.warn(seg);
           console.log(visemes);
-          console.log(seg);
           if (i === this.lastIndex) {
             this.onLastViseme?.(
               visemes.filter(Boolean),

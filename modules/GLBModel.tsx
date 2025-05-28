@@ -42,8 +42,6 @@ export default function FaceModel({
 
   const csvRef = useRef<string[][]>([]);
 
-  const isUseWispre: boolean = true;
-
   const stopAllAnimation = () => {
     if (standTalk.current) {
       standTalk.current.stop();
@@ -124,7 +122,6 @@ export default function FaceModel({
   useEffect(() => {
     const head = scene.getObjectByName("Wolf3D_Head") as THREE.Mesh;
     if (head) {
-      console.log("head ", head);
       mesh.current = head;
       morphDict.current = head.morphTargetDictionary || {};
       morphInfluences.current = head.morphTargetInfluences || [];
@@ -132,132 +129,42 @@ export default function FaceModel({
       console.log("找不到 morph target 的 mesh，請確認名稱");
     }
 
-    if (animations.length > 0) {
-      mixer.current = new AnimationMixer(scene);
-      animations.forEach((clip) => {
-        const action = mixer.current!.clipAction(clip);
-        console.log("action", action);
-        //action.play();
-        //action.paused = true;
-      });
-    }
+    // if (animations.length > 0) {
+    //   mixer.current = new AnimationMixer(scene);
+    //   animations.forEach((clip) => {
+    //     const action = mixer.current!.clipAction(clip);
+    //     console.log("action", action);
+    //     //action.play();
+    //     //action.paused = true;
+    //   });
+    // }
 
-    const loader = new GLTFLoader();
-    loader.load("/models/change-pose.glb", (gltf) => {
-      //console.log("llllllllllll gltf", gltf);
-      const clip = gltf.animations[1]; // 假設一個 animation clip
-      const action = mixer.current!.clipAction(clip); // 套用到主模型
-      changePose.current = action;
-      //action.play();
-    });
+    // const loader = new GLTFLoader();
+    // loader.load("/models/change-pose.glb", (gltf) => {
+    //   //console.log("llllllllllll gltf", gltf);
+    //   const clip = gltf.animations[1]; // 假設一個 animation clip
+    //   const action = mixer.current!.clipAction(clip); // 套用到主模型
+    //   changePose.current = action;
+    //   //action.play();
+    // });
 
-    loader.load("/models/stand-talk.glb", (gltf) => {
-      const clip = gltf.animations[1]; // 假設一個 animation clip
-      const action = mixer.current!.clipAction(clip); // 套用到主模型
-      standTalk.current = action;
-      //action.play();
-    });
+    // loader.load("/models/stand-talk.glb", (gltf) => {
+    //   const clip = gltf.animations[1]; // 假設一個 animation clip
+    //   const action = mixer.current!.clipAction(clip); // 套用到主模型
+    //   standTalk.current = action;
+    //   //action.play();
+    // });
   }, [scene]);
 
   useEffect(() => {
     if (speak) {
-      if (isUseWispre) {
-        //if (!text) return;
-        if (setSubtitle) {
-          setSubtitle((prev) => prev + text);
-        }
-        const filtered = viseme.filter((item) => item !== "");
-        if (filtered.length > 0) {
-          currentViseme.current = filtered; //[firstNonEmpty!];
-          currentIndex.current = 0;
-        }
-        return;
+      if (setSubtitle) {
+        setSubtitle((prev) => prev + text);
       }
-
-      if (standTalk.current && url == "/models/Sage_cc4_model_idle01.glb") {
-        standTalk.current.play();
-      }
-      const utterance = new SpeechSynthesisUtterance(text);
-      const lang = "zh-TW"; //"en-US"
-      utterance.lang = lang;
-      const voices = window.speechSynthesis.getVoices();
-      const voice = voices.find((v) => v.lang === lang);
-      if (voice) utterance.voice = voice;
-      utterance.rate = 1;
-      const words = text.toUpperCase().split("");
-
-      utterance.onboundary = async (event) => {
-        //const word = words[(event.charIndex, event.charLength)];
-        const start = event.charIndex;
-        const end = event.charIndex + event.charLength;
-        const word = text.slice(start, end);
-        if (!word) return;
-        if (setSubtitle) {
-          setSubtitle(text.slice(0, end));
-        }
-        console.warn("word: ", word);
-        if (isChinese(word)) {
-          const pinyins = textToPinyin(word);
-          console.log("pinyins: ", pinyins);
-          let phonemes = pinyins
-            .map((p) => pinyinToArpabet(p) ?? "")
-            .join(" ")
-            .trim()
-            .split(" ")
-            .map((p) => p.replace(/[0-9]/g, ""));
-
-          phonemes = phonemes.length > 2 ? phonemes.slice(0, 2) : phonemes;
-          console.log("phonemes: ", phonemes);
-          const visemes = phonemes.map((p) => {
-            const basePhoneme = p.replace(/[0-9]/g, ""); // 移除重音符號
-            return phonemeToViseme[basePhoneme] ?? "";
-          });
-          console.log(`kk: `, visemes);
-          const firstNonEmpty = visemes.find((item) => item !== "");
-          const filtered = visemes.filter((item) => item !== "");
-          if (filtered.length > 0) {
-            currentViseme.current = filtered; //[firstNonEmpty!];
-            currentIndex.current = 0;
-          }
-        } else {
-          const phoneme = word.toUpperCase();
-          const viseme = textToVisemes(phoneme);
-          if (viseme) {
-            currentViseme.current = viseme;
-            currentIndex.current = 0;
-            // setTimeout(() => {
-            //   if (currentViseme.current === viseme) {
-            //     currentViseme.current = null;
-            //   }
-            // }, 150);
-          }
-        }
-      };
-
-      utterance.onend = () => {
-        console.log("Speech ended, resetting viseme");
-
-        setTimeout(() => {
-          currentViseme.current = null;
-          if (standTalk.current && url == "/models/Sage_cc4_model_idle01.glb") {
-            standTalk.current.stop();
-          }
-
-          if (setSubtitle) {
-            setSubtitle("");
-          }
-          if (mesh.current) {
-            const influences = mesh.current.morphTargetInfluences!;
-            for (let i = 0; i < influences.length; i++) {
-              influences[i] = 0;
-            }
-          }
-        }, 300);
-      };
-
-      speechSynthesis.speak(utterance);
-      if (setSpeak) {
-        setSpeak(false);
+      const filtered = viseme.filter((item) => item !== "");
+      if (filtered.length > 0) {
+        currentViseme.current = filtered; //[firstNonEmpty!];
+        currentIndex.current = 0;
       }
     } else {
       currentViseme.current = null;
@@ -274,122 +181,23 @@ export default function FaceModel({
           influences[i] = 0;
         }
       }
-      // setTimeout(() => {
-      //   currentViseme.current = null;
-      //   if (standTalk.current && url == "/models/Sage_cc4_model_idle01.glb") {
-      //     standTalk.current.stop();
-      //   }
-
-      //   if (setSubtitle) {
-      //     setSubtitle("");
-      //   }
-      //   if (mesh.current) {
-      //     const influences = mesh.current.morphTargetInfluences!;
-      //     for (let i = 0; i < influences.length; i++) {
-      //       influences[i] = 0;
-      //     }
-      //   }
-      // }, 10);
     }
   }, [speak, viseme]);
-  let test = 1;
+
   useFrame((_, delta) => {
     mixer.current?.update(delta);
-    // elapsedTime.current += delta * 1000;
-    // //if (elapsedTime.current >= duration && currentViseme.current) {
-    // elapsedTime.current = 0;
-
-    scene.traverse((object) => {
-      // 檢查物體是否有 morphTargetDictionary
-      if (object instanceof THREE.Mesh && object.morphTargetDictionary) {
-        //console.log(`Mesh: ${object.name}`);
-        //console.log("Morph Target Dictionary:", object.morphTargetDictionary);
-        if (object.name !== "CC_Base_Body_1") return;
-   
-        Object.keys(object.morphTargetDictionary!).forEach(
-          (targetName, index) => {
-            //console.log(`qqqqqqq: ${item[index + 2]}`);
-            const targetIndex = object.morphTargetDictionary![targetName];
-            object.morphTargetInfluences![targetIndex] = 0;
-          }
-        );
-
-        if (csvRef.current.length > 0) {
-          const item = csvRef.current[test];
-          if (item) {
-            Object.keys(object.morphTargetDictionary!).forEach(
-              (targetName, index) => {
-                // console.log(
-                //   `qqqqqqqkkkkkkkkkk: lengh : ${item.length}  index : ${
-                //     Object.keys(object.morphTargetDictionary!).length
-                //   }`
-                // );
-                if (index > 33 && index < 60) {
-                  const targetIndex = object.morphTargetDictionary![targetName];
-                  object.morphTargetInfluences![targetIndex] = parseFloat(
-                    item[index]
-                  );
-                }
-              }
-            );
-          }
-        }
-      }
-    });
-    test = test > csvRef.current.length ? 1 : test + 1;
-    //}
-
-    // scene.traverse((object) => {
-    //   // 檢查物體是否有 morphTargetDictionary
-    //   if (object instanceof THREE.Mesh && object.morphTargetDictionary) {
-    //     //console.log(`Mesh: ${object.name}`);
-    //     //console.log("Morph Target Dictionary:", object.morphTargetDictionary);
-    //     if (object.name !== "CC_Base_Body_1") return;
-    //     Object.keys(object.morphTargetDictionary!).forEach(
-    //       (targetName, index) => {
-    //         const targetIndex = object.morphTargetDictionary![targetName];
-    //         object.morphTargetInfluences![targetIndex] = Math.abs(
-    //           Math.sin(performance.now() / 500)
-    //         );
-    //       }
-    //     );
-    //   }
-    // });
-
     if (!mesh.current) return;
-    //console.log(mesh.current.morphTargetDictionary);
-
-    //test for mouseOpen
-    // const index = morphDict.current["mouthOpen"];
-    // if (index !== undefined) {
-    //   mesh.current.morphTargetInfluences![index] = Math.abs(
-    //     Math.sin(performance.now() / 500)
-    //   );
-    // }
-
-    // const influences = mesh.current.morphTargetInfluences!;
-    // if (currentViseme.current) {
-    //   const index = morphDict.current[currentViseme.current];
-    //   influences[index] = 0.8;
-    // } else {
-    //   for (let i = 0; i < influences.length; i++) {
-    //     influences[i] = 0;
-    //   }
-    // }
     elapsedTime.current += delta * 1000;
     if (elapsedTime.current >= duration && currentViseme.current) {
       elapsedTime.current = 0;
-  
+
       // 重置所有
       const influences = mesh.current.morphTargetInfluences!;
-      if(currentIndex.current == 0){
+      if (currentIndex.current == 0) {
         for (let i = 0; i < influences.length; i++) {
-            influences[i] = 0;
-          }
+          influences[i] = 0;
+        }
       }
-
-      //console.log("所有 morph target 名稱：", Object.keys(morphDict.current));
-      // 設定當前 viseme
 
       const viseme = currentViseme.current[currentIndex.current];
       const index = morphDict.current[viseme];
@@ -401,8 +209,6 @@ export default function FaceModel({
       if (currentIndex.current < currentViseme.current.length - 1) {
         currentIndex.current += 1;
       }
-      // currentIndex.current =
-      //   (currentIndex.current + 1) % currentViseme.current.length;
     } else if (
       elapsedTime.current >= 150 &&
       currentViseme.current &&
