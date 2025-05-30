@@ -1,8 +1,9 @@
 import { Canvas } from "@react-three/fiber";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import GLBModel from "@/modules/GLBModel";
 import CameraScene from "@/modules/CameraScene";
 import { VisemeUtterance } from "@/class/VisemeUtterance";
+import { AsrWordAligner } from "@/utils/asrWordAligner";
 
 const A2F: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -17,6 +18,8 @@ const A2F: React.FC = () => {
   const [subTitle, setSubTitle] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
 
+  const testTime = useRef(0);
+
   const speekNumber = useRef(2);
   const demoText = [
     "你好我是您的智慧健康小助手目前正在華碩服務",
@@ -26,88 +29,97 @@ const A2F: React.FC = () => {
     "還可以問我胃鏡檢查需要準備什麼嗎",
   ];
 
-  const startRecording = async () => {
-    const ws = new WebSocket("ws://localhost:8765");
-    ws.binaryType = "arraybuffer";
-    wsRef.current = ws;
+  async function runAsrWordAlign(audioPath: string, text: string) {
+    testTime.current = Date.now();
+    const aligner = new AsrWordAligner();
+    const response = await fetch(audioPath);
+    const audioBuffer = await response.arrayBuffer();
+    console.warn("轉audio buffer 時間:", Date.now() - testTime.current);
 
-    ws.onopen = () => {
-      const dict = {
-        method: "asr",
-        audio_path: `/Users/irobot13/Gary/lip_sync_test/lip_sync/public/idle_${speekNumber.current}.wav`,
-        text: demoText[speekNumber.current - 1],
-      };
-      wsRef.current!.send(JSON.stringify(dict));
-    };
+    testTime.current = Date.now();
+    aligner.align(
+      audioBuffer,
+      text,
+      (result) => {
+        console.warn("ASR 時間:", Date.now() - testTime.current);
+        console.log("對齊結果：", result);
+        try {
+          //const data = JSON.parse(result); // ← 將 JSON 字串轉為 JS 物件
+          const wordSegments = result.align_result.map(
+            (item: any[], index: number) => {
+              const start = item[0];
+              const end = result.align_result[index + 1]?.[0] ?? start + 0.1; // 如果最後一個，給預設長度 0.1 秒
+              const word = item[1];
 
-    ws.onmessage = (event) => {
-      const text = typeof event.data === "string" ? event.data : "";
-      //setTranscript((prev) => prev + text);
-      try {
-        const data = JSON.parse(text); // ← 將 JSON 字串轉為 JS 物件
-        const wordSegments = data.align_result.map(
-          (item: any[], index: number) => {
-            const start = item[0];
-            const end = data.align_result[index + 1]?.[0] ?? start + 0.1; // 如果最後一個，給預設長度 0.1 秒
-            const word = item[1];
+              return { start, end, word };
+            }
+          );
+          const fullText = wordSegments
+            .map((segment: { word: any }) => segment.word)
+            .join("");
+          console.warn("語音辨識結果物件(原始):", result);
+          console.log("語音辨識結果物件(轉過):", wordSegments);
 
-            return { start, end, word };
+          if (wordSegments) {
+            // const wordSegments = data.segments[0].words.filter(
+            //   (w: { word: string }) => /[\u4e00-\u9fa5]/.test(w.word)
+            // ); //把標點移除
+
+            const utterance = new VisemeUtterance({
+              audioUrl: audioPath,
+              wordSegments: wordSegments,
+              onViseme: (viseme, word, start, end) => {
+                setDuration(
+                  viseme.length > 0
+                    ? ((end - start) / viseme.length) * 1000
+                    : 10
+                );
+                setText(word);
+                setViseme(viseme);
+              },
+              onLastViseme: (viseme, word, start, end) => {
+                console.log("onLastViseme:", viseme, word, start, end);
+                setText(word);
+                setViseme(viseme);
+                setTimeout(() => {
+                  setText("");
+                  setViseme([]);
+                  setTranscript("");
+                  stopRecording();
+                }, 200);
+              },
+              onEnd: () => {
+                console.log("onEnd:");
+              },
+            });
+            utterance.play();
+            setTranscript(fullText);
+            setSpeak(true);
+            //utterance.play();
+          } else {
+            setTranscript("");
           }
-        );
-        const fullText = wordSegments
-          .map((segment: { word: any }) => segment.word)
-          .join("");
-        console.warn("語音辨識結果物件(原始):", data);
-        console.log("語音辨識結果物件(轉過):", wordSegments);
-
-        if (wordSegments) {
-          // const wordSegments = data.segments[0].words.filter(
-          //   (w: { word: string }) => /[\u4e00-\u9fa5]/.test(w.word)
-          // ); //把標點移除
-
-          const utterance = new VisemeUtterance({
-            audioUrl: `/idle_${speekNumber.current}.wav`,
-            wordSegments: wordSegments,
-            onViseme: (viseme, word, start, end) => {
-              setDuration(
-                viseme.length > 0 ? ((end - start) / viseme.length) * 1000 : 10
-              );
-              setText(word);
-              setViseme(viseme);
-            },
-            onLastViseme: (viseme, word, start, end) => {
-              console.log("onLastViseme:", viseme, word, start, end);
-              setText(word);
-              setViseme(viseme);
-              setTimeout(() => {
-                setText("");
-                setViseme([]);
-                setTranscript("");
-                stopRecording();
-              }, 200);
-            },
-            onEnd: () => {
-              console.log("onEnd:");
-            },
-          });
-          utterance.play();
-          setTranscript(fullText);
-          setSpeak(true);
-          //utterance.play();
-        } else {
+        } catch (e) {
           setTranscript("");
         }
-      } catch (e) {
-        setTranscript("");
+        if (speekNumber.current == 5) {
+          speekNumber.current = 1;
+        } else {
+          speekNumber.current = speekNumber.current + 1;
+        }
+        speekNumber.current = 2;
+      },
+      (err) => {
+        console.error("錯誤：", err);
       }
-      if (speekNumber.current == 5) {
-        speekNumber.current = 1;
-      } else {
-        speekNumber.current = speekNumber.current + 1;
-      }
-      speekNumber.current = 2;
-    };
+    );
+  }
 
+  const startRecording = async () => {
+    runAsrWordAlign(
+      `/idle_${speekNumber.current}.wav`,
+      demoText[speekNumber.current - 1]
+    );
     setIsRecording(true);
   };
 

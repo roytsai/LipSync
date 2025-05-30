@@ -7,12 +7,17 @@ import {
 } from "react";
 import { FBXLoader } from "three-stdlib";
 import { useFrame } from "@react-three/fiber";
-import { AnimationAction, AnimationMixer, Group, Mesh, AnimationClip } from "three";
+import {
+  AnimationAction,
+  AnimationMixer,
+  Group,
+  Mesh,
+  AnimationClip,
+} from "three";
 import Papa from "papaparse";
 import * as THREE from "three";
 import { GLTFLoader } from "three-stdlib";
 import { useFBX } from "@react-three/drei";
-
 
 interface FbxModelProps {
   url: string;
@@ -82,7 +87,7 @@ const blendShapeMap: Record<string, string> = {
   CheekSuckRight: "Cheek_Suck_R",
   NoseSneerLeft: "Nose_Sneer_L",
   NoseSneerRight: "Nose_Sneer_R",
-  TongueOut: "Tongue_Out"
+  TongueOut: "Tongue_Out",
 };
 
 const FbxModel = forwardRef<FbxModelHandle, FbxModelProps>(({ url }, ref) => {
@@ -91,7 +96,9 @@ const FbxModel = forwardRef<FbxModelHandle, FbxModelProps>(({ url }, ref) => {
   const mixerRef = useRef<AnimationMixer | null>(null);
   const actionRef = useRef<AnimationAction | null>(null);
   const timeRef = useRef(0);
-  const animationData = useRef<{ time: number; visemes: Record<string, number> }[]>([]);
+  const animationData = useRef<
+    { time: number; visemes: Record<string, number> }[]
+  >([]);
   const isPlaying = useRef(false);
   const mixerPoseRef = useRef<AnimationMixer | null>(null);
   const changePose = useRef<THREE.AnimationAction | null>(null);
@@ -100,30 +107,28 @@ const FbxModel = forwardRef<FbxModelHandle, FbxModelProps>(({ url }, ref) => {
 
   useImperativeHandle(ref, () => ({
     playAnimation: (pose) => {
-        console.log('play:'+pose);
+      console.log("play:" + pose);
       if (actionRef.current) {
         actionRef.current.reset().play();
         isPlaying.current = true;
         console.log(animationData.current);
         console.log(changePose.current);
-        if(changePose.current && standTalk.current && pose == 'animation1'){
-            console.log('play1');
-            standTalk.current.stop();
-            changePose.current.play();
-
+        if (changePose.current && standTalk.current && pose == "animation1") {
+          console.log("play1");
+          standTalk.current.stop();
+          changePose.current.play();
         }
-        if(standTalk.current && changePose.current && pose == 'animation2'){
-            console.log('play2');
-            changePose.current.stop();
-            standTalk.current.play();
+        if (standTalk.current && changePose.current && pose == "animation2") {
+          console.log("play2");
+          changePose.current.stop();
+          standTalk.current.play();
         }
-        
       }
     },
   }));
 
   useEffect(() => {
-    fetch("/animation_frames_3.csv")
+    fetch("/animation_frames_2.csv")
       .then((res) => res.text())
       .then((csvText) => {
         const result = Papa.parse(csvText, { header: true });
@@ -142,7 +147,6 @@ const FbxModel = forwardRef<FbxModelHandle, FbxModelProps>(({ url }, ref) => {
           return { time, visemes };
         });
       });
-
   }, []);
 
   useEffect(() => {
@@ -157,9 +161,9 @@ const FbxModel = forwardRef<FbxModelHandle, FbxModelProps>(({ url }, ref) => {
           const mixer = new AnimationMixer(fbx);
           const action = mixer.clipAction(fbx.animations[0]);
           actionRef.current = action;
-          console.log('mixerRef useEffect*****');
+          console.log("mixerRef useEffect*****");
           mixerRef.current = mixer;
-          setMixerReady(true); 
+          setMixerReady(true);
         }
 
         fbx.traverse((child) => {
@@ -170,9 +174,6 @@ const FbxModel = forwardRef<FbxModelHandle, FbxModelProps>(({ url }, ref) => {
           ) {
             meshRef.current = child as typeof meshRef.current;
           }
-
-
-
         });
       },
       undefined,
@@ -180,53 +181,55 @@ const FbxModel = forwardRef<FbxModelHandle, FbxModelProps>(({ url }, ref) => {
         console.error("FBX load error:", err);
       }
     );
-
   }, [url]);
 
   useEffect(() => {
-    console.log('mixerRef useEffect');
+    console.log("mixerRef useEffect");
     console.log(mixerRef.current);
-    if(mixerRef.current){
-        const poseLoader = new FBXLoader();
-        poseLoader.load("/models/change-pose.fbx", (fbx) => {
-            console.log('change-pose.fbx');
-            console.log(fbx.animations);
-            const clip = fbx.animations[1];
-            const mixer = mixerRef.current;
-            if (!mixer) {
-                console.error("Mixer is not ready yet.");
-                return;
-            }
-            const filteredTracks = clip.tracks.filter(
-                (track) => !track.name.toLowerCase().includes("eye")
-            );
-            const filteredClip = new AnimationClip(clip.name, clip.duration, filteredTracks);
-            const action = mixer.clipAction(filteredClip);
-            changePose.current = action;
+    if (mixerRef.current) {
+      const poseLoader = new FBXLoader();
+      poseLoader.load("/models/change-pose.fbx", (fbx) => {
+        console.log("change-pose.fbx");
+        console.log(fbx.animations);
+        const clip = fbx.animations[1];
+        const mixer = mixerRef.current;
+        if (!mixer) {
+          console.error("Mixer is not ready yet.");
+          return;
+        }
+        const filteredTracks = clip.tracks.filter(
+          (track) => !track.name.toLowerCase().includes("eye")
+        );
+        const filteredClip = new AnimationClip(
+          clip.name,
+          clip.duration,
+          filteredTracks
+        );
+        const action = mixer.clipAction(filteredClip);
+        changePose.current = action;
+      });
 
+      poseLoader.load("/models/stand-talk.fbx", (fbx) => {
+        console.log("stand-talk.fbx");
+        const clip = fbx.animations[1];
 
-        });
-
-        poseLoader.load("/models/stand-talk.fbx", (fbx) => {
-            console.log('stand-talk.fbx');
-            const clip = fbx.animations[1];
-
-
-
-            const mixer = mixerRef.current;
-            if (!mixer) {
-                console.error("Mixer is not ready yet.");
-                return;
-            }
-            const filteredTracks = clip.tracks.filter(
-                (track) => !track.name.toLowerCase().includes("eye")
-            );
-            const filteredClip = new AnimationClip(clip.name, clip.duration, filteredTracks);
-            const action = mixer.clipAction(filteredClip);
-            console.log(action);
-            standTalk.current = action;
-
-          });
+        const mixer = mixerRef.current;
+        if (!mixer) {
+          console.error("Mixer is not ready yet.");
+          return;
+        }
+        const filteredTracks = clip.tracks.filter(
+          (track) => !track.name.toLowerCase().includes("eye")
+        );
+        const filteredClip = new AnimationClip(
+          clip.name,
+          clip.duration,
+          filteredTracks
+        );
+        const action = mixer.clipAction(filteredClip);
+        console.log(action);
+        standTalk.current = action;
+      });
     }
   }, [mixerReady]);
 
@@ -254,7 +257,8 @@ const FbxModel = forwardRef<FbxModelHandle, FbxModelProps>(({ url }, ref) => {
 
     if (
       animationData.current.length > 1 &&
-      timeRef.current >= animationData.current[animationData.current.length - 2].time
+      timeRef.current >=
+        animationData.current[animationData.current.length - 2].time
     ) {
       console.log("播放完畢");
       timeRef.current = 0;
