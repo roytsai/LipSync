@@ -165,6 +165,9 @@ export default function FaceModel({
       if (filtered.length > 0) {
         currentViseme.current = filtered; //[firstNonEmpty!];
         currentIndex.current = 0;
+      } else {
+        currentViseme.current = ["viseme_sil"];
+        currentIndex.current = 0;
       }
     } else {
       currentViseme.current = null;

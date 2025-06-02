@@ -44,14 +44,21 @@ const A2F: React.FC = () => {
         console.warn("ASR 時間:", Date.now() - testTime.current);
         console.log("對齊結果：", result);
         try {
-          //const data = JSON.parse(result); // ← 將 JSON 字串轉為 JS 物件
-          const wordSegments = result.align_result.map(
+          //const data = JSON.parse(result);
+          const wordSegments = result.align_result.flatMap(
             (item: any[], index: number) => {
               const start = item[0];
               const end = result.align_result[index + 1]?.[0] ?? start + 0.1; // 如果最後一個，給預設長度 0.1 秒
               const word = item[1];
 
-              return { start, end, word };
+              if (end - start > 0.3) {
+                return [
+                  { start, end: start + 0.3, word },
+                  { start: start + 0.3, end, word: "," },
+                ];
+              } else {
+                return [{ start, end, word }];
+              }
             }
           );
           const fullText = wordSegments
@@ -71,7 +78,7 @@ const A2F: React.FC = () => {
               onViseme: (viseme, word, start, end) => {
                 setDuration(
                   viseme.length > 0
-                    ? ((end - start) / viseme.length) * 1000
+                    ? ((end - start) / viseme.length) * 1000 * 0.7
                     : 10
                 );
                 setText(word);

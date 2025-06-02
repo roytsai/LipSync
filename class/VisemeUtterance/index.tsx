@@ -103,7 +103,7 @@ export class VisemeUtterance {
             return phonemeToViseme[basePhoneme] ?? "";
           });
           console.warn(seg);
-          console.log(visemes);
+          console.log(visemes.filter(Boolean));
           if (i === this.lastIndex) {
             this.onLastViseme?.(
               visemes.filter(Boolean),
