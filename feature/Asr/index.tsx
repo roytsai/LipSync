@@ -44,23 +44,32 @@ const A2F: React.FC = () => {
         console.warn("ASR 時間:", Date.now() - testTime.current);
         console.log("對齊結果：", result);
         try {
-          //const data = JSON.parse(result);
           const wordSegments = result.align_result.flatMap(
-            (item: any[], index: number) => {
-              const start = item[0];
-              const end = result.align_result[index + 1]?.[0] ?? start + 0.1; // 如果最後一個，給預設長度 0.1 秒
-              const word = item[1];
-
-              if (end - start > 0.3) {
+            (
+              item: { start: number; end: number; word: string },
+              index: number
+            ) => {
+              const start = item.start;
+              const end = item.end;
+              const word = item.word;
+              if (
+                index < result.align_result.length - 1 &&
+                end != result.align_result[index + 1].start
+              ) {
                 return [
-                  { start, end: start + 0.3, word },
-                  { start: start + 0.3, end, word: "," },
+                  { start, end, word },
+                  {
+                    start: end,
+                    end: result.align_result[index + 1].start,
+                    word: ",",
+                  },
                 ];
               } else {
                 return [{ start, end, word }];
               }
             }
           );
+          
           const fullText = wordSegments
             .map((segment: { word: any }) => segment.word)
             .join("");
@@ -107,6 +116,8 @@ const A2F: React.FC = () => {
             setTranscript("");
           }
         } catch (e) {
+          console.log("errrrrrrr:", e);
+          setSpeak(false);
           setTranscript("");
         }
         if (speekNumber.current == 5) {
