@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Script from "next/script";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,6 +25,26 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* 依照依賴順序載入 */}
+        <Script
+          src="https://code.jquery.com/jquery-3.5.1.min.js"
+          strategy="beforeInteractive"
+        />
+        <Script
+          src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"
+          strategy="beforeInteractive"
+        />
+        <Script
+          src="https://cdn.webrtc-experiment.com/MediaStreamRecorder.js"
+          strategy="beforeInteractive"
+        />
+        <Script
+          src="https://dswsstaging.asus.com/restasr_streaming/static/Asus_SpeechRecognition.js"
+          strategy="beforeInteractive"
+        />
+      </head>
+
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

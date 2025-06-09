@@ -11,7 +11,7 @@ type WordSegment = {
 
 type VisemeUtteranceOptions = {
   wordSegments: WordSegment[];
-  audioUrl: string;
+  audioBuffer: ArrayBuffer;
   onViseme?: (
     viseme: string[],
     word: string,
@@ -50,16 +50,21 @@ export class VisemeUtterance {
 
   constructor({
     wordSegments,
-    audioUrl,
+    audioBuffer,
     onViseme,
     onLastViseme,
     onEnd,
   }: VisemeUtteranceOptions) {
     this.wordSegments = wordSegments;
-    this.audio = new Audio(audioUrl);
+    const blob = new Blob([audioBuffer], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+    this.audio = new Audio(url);
     this.audio.onended = () => {
       this.stopLoop();
       onEnd?.();
+    };
+    this.audio.onended = () => {
+      URL.revokeObjectURL(url);
     };
     this.onViseme = onViseme;
     this.onLastViseme = onLastViseme;
