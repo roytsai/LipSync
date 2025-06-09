@@ -22,11 +22,9 @@ function Page() {
   }, []);
 
   const handlePlay = () => {
-    audioRef.current!.play(); // 撥放音檔
     fbxRef.current!.playAnimation("animation1"); // 執行模型動畫
   };
   const handlePlay2 = () => {
-    audioRef.current!.play(); // 撥放音檔
     fbxRef.current!.playAnimation("animation2"); // 執行模型動畫
   };
 
@@ -60,15 +58,17 @@ function Page() {
         撥放動作2
       </button>
 
-      <audio ref={audioRef} src="/idle_2.wav" />
-
       <Canvas
         style={{ width: "100vw", height: "100vh" }}
         camera={{ position: [0, 16, 30], fov: 40 }}
       >
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 5]} intensity={1.2} />
-        <FbxModel ref={fbxRef} url="/models/Sage_cc4_model_stand.Fbx" />
+        {/* <FbxModel ref={fbxRef} url="/Sage_0604/Sage_cc4_model(0604_V1).Fbx" /> */}
+          {/* <FbxModel ref={fbxRef} url="/Sage_0602/Sage_cc4_model(0602_V1).fbx" /> */}
+        <FbxModel ref={fbxRef} url="/Sage_cc4_model_stand.Fbx" />
+        
+
         {/* <GlbModel url="/Sage_cc4_model_stand_g.glb" /> */}
         <OrbitControls />
       </Canvas>
