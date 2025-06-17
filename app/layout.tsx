@@ -40,9 +40,13 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
         <Script
-          src="https://dswsstaging.asus.com/restasr_streaming/static/Asus_SpeechRecognition.js"
+          src={process.env.NEXT_PUBLIC_ASUS_SPEECH_RECOGNITION_LIB}
           strategy="beforeInteractive"
         />
+        {/* <Script
+          src="/js/Asus_SpeechRecognition.js"
+          strategy="beforeInteractive"
+        /> */}
       </head>
 
       <body

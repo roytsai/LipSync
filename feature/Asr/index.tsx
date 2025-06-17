@@ -3,38 +3,26 @@ import React, { useEffect, useRef, useState } from "react";
 import GLBModel from "@/modules/GLBModel";
 import CameraScene from "@/modules/CameraScene";
 import { VisemeUtterance } from "@/class/VisemeUtterance";
-import { AsrWordAligner } from "@/utils/asrWordAligner";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import {
+  TTSresultItem,
+  useSpeechRecognition,
+} from "@/hooks/useSpeechRecognition";
 
 const A2F: React.FC = () => {
   const [text, setText] = useState("");
   const [viseme, setViseme] = useState<string[]>([]);
   const [duration, setDuration] = useState(150);
+
   const [speak, setSpeak] = useState(false);
   const url = "/models/face5.glb";
   const [subTitle, setSubTitle] = useState("");
+  const ttsResultQueue = useRef<TTSresultItem[]>([]);
   const boxRef = useRef<HTMLDivElement>(null);
 
   const testTime = useRef(0);
 
-  const speekNumber = useRef(2);
-
-  const {
-    isRecording,
-    startRecord,
-    stopRecord,
-    recognitionResult,
-    ttsAudio,
-    ttsSentence,
-  } = useSpeechRecognition();
-
-  const demoText = [
-    "你好我是您的智慧健康小助手目前正在華碩服務",
-    "要與我互動請按麥克風開始說話說完時再按一次",
-    "您可以問我高血壓可以怎麼改善",
-    "或是問我過敏才會氣喘嗎",
-    "還可以問我胃鏡檢查需要準備什麼嗎",
-  ];
+  const { isRecording, startRecord, stopRecord, recognitionResult, ttsResult } =
+    useSpeechRecognition();
 
   function audioBufferToWavBlob(audioBuffer: AudioBuffer): Blob {
     const numChannels = audioBuffer.numberOfChannels;
@@ -104,157 +92,257 @@ const A2F: React.FC = () => {
   }
 
   // 合併 AudioBuffer
-  async function mergeAudioChunks(
-    base64Chunks: string[],
-    mimeType = "audio/wav"
-  ): Promise<Blob> {
+  async function mergeAudioChunks(base64Chunks: string[]): Promise<Blob> {
     const audioCtx = new (window.AudioContext ||
       (window as any).webkitAudioContext)();
     const decodedBuffers: AudioBuffer[] = [];
 
-    // 解碼所有 base64 chunk
     for (const base64 of base64Chunks) {
-      const buffer = base64ToArrayBuffer(base64);
-      const audioBuffer = await audioCtx.decodeAudioData(buffer.slice(0)); // 注意 .slice() 解決 Safari bug
-      decodedBuffers.push(audioBuffer);
-    }
+      try {
+        const buffer = base64ToArrayBuffer(base64);
 
-    // 計算總長度
-    const totalLength = decodedBuffers.reduce(
-      (sum, buf) => sum + buf.length,
-      0
-    );
-    const numberOfChannels = decodedBuffers[0].numberOfChannels;
-    const sampleRate = decodedBuffers[0].sampleRate;
+        const audioBuffer = await audioCtx.decodeAudioData(buffer.slice(0));
 
-    // 建立合併後的 buffer
-    const output = audioCtx.createBuffer(
-      numberOfChannels,
-      totalLength,
-      sampleRate
-    );
+        if (!audioBuffer || audioBuffer.length === 0) {
+          console.warn("kkkkkkkkkk Empty or invalid audio buffer, skipped.");
+          continue;
+        }
 
-    for (let channel = 0; channel < numberOfChannels; channel++) {
-      let offset = 0;
-      for (const buffer of decodedBuffers) {
-        output
-          .getChannelData(channel)
-          .set(buffer.getChannelData(channel), offset);
-        offset += buffer.length;
+        // 確保格式一致
+        if (decodedBuffers.length > 0) {
+          const ref = decodedBuffers[0];
+          if (
+            audioBuffer.sampleRate !== ref.sampleRate ||
+            audioBuffer.numberOfChannels !== ref.numberOfChannels
+          ) {
+            console.warn("Mismatched audio format, skipped.");
+            continue;
+          }
+        }
+
+        decodedBuffers.push(audioBuffer);
+      } catch (err) {
+        console.error("kkkkkkkkkk Failed to decode audio chunk", err);
       }
     }
 
-    // 將 AudioBuffer 導出為 WAV Blob（使用 helper）
+    if (decodedBuffers.length === 0) {
+      throw new Error("kkkkkkkkkk No valid audio chunks.");
+    }
+
+    // 合併
+    const totalLength = decodedBuffers.reduce((sum, b) => sum + b.length, 0);
+    const sampleRate = decodedBuffers[0].sampleRate;
+    const numChannels = decodedBuffers[0].numberOfChannels;
+    const output = audioCtx.createBuffer(numChannels, totalLength, sampleRate);
+
+    for (let ch = 0; ch < numChannels; ch++) {
+      let offset = 0;
+      for (const buf of decodedBuffers) {
+        output.getChannelData(ch).set(buf.getChannelData(ch), offset);
+        offset += buf.length;
+      }
+    }
+
     return audioBufferToWavBlob(output);
   }
 
-  async function runAsrWordAlign(base64Audio: string[], text: string) {
+  async function runAsrWordAlign() {
+    if (ttsResultQueue.current.length == 0 || speak) {
+      return;
+    }
+    const result = ttsResultQueue.current.shift();
     testTime.current = Date.now();
-    const aligner = new AsrWordAligner();
-    //const response = await fetch(audioPath);
-    //const audioBuffer = await response.arrayBuffer();
-    //console.warn("轉audio buffer 時間:", Date.now() - testTime.current);
-    const blob = await mergeAudioChunks(base64Audio);
+
+    const blob = await mergeAudioChunks(result!.ttsAudio);
     const url = URL.createObjectURL(blob);
 
     const audioBuffer = await blob.arrayBuffer();
-
-    testTime.current = Date.now();
-    aligner.align(
-      audioBuffer,
-      text,
-      (result) => {
-        console.warn("ASR 時間:", Date.now() - testTime.current);
-        console.log("對齊結果：", result);
-        try {
-          const wordSegments = result.align_result.flatMap(
-            (
-              item: { start: number; end: number; word: string },
-              index: number
-            ) => {
-              const start = item.start;
-              const end = item.end;
-              const word = item.word;
-              if (
-                index < result.align_result.length - 1 &&
-                end != result.align_result[index + 1].start
-              ) {
-                return [
-                  { start, end, word },
-                  {
-                    start: end,
-                    end: result.align_result[index + 1].start,
-                    word: ",",
-                  },
-                ];
-              } else {
-                return [{ start, end, word }];
-              }
-            }
-          );
-
-          const fullText = wordSegments
-            .map((segment: { word: any }) => segment.word)
-            .join("");
-          console.warn("語音辨識結果物件(原始):", result);
-          console.log("語音辨識結果物件(轉過):", wordSegments);
-
-          if (wordSegments) {
-            // const wordSegments = data.segments[0].words.filter(
-            //   (w: { word: string }) => /[\u4e00-\u9fa5]/.test(w.word)
-            // ); //把標點移除
-
-            const utterance = new VisemeUtterance({
-              audioBuffer: audioBuffer,
-              wordSegments: wordSegments,
-              onViseme: (viseme, word, start, end) => {
-                setDuration(
-                  viseme.length > 0
-                    ? ((end - start) / viseme.length) * 1000 * 0.5
-                    : 10
-                );
-                setText(word);
-                setViseme(viseme);
-              },
-              onLastViseme: (viseme, word, start, end) => {
-                console.log("onLastViseme:", viseme, word, start, end);
-                setText(word);
-                setViseme(viseme);
-                setTimeout(() => {
-                  setText("");
-                  setViseme([]);
-                  stopRecording();
-                }, 500);
-              },
-              onEnd: () => {
-                console.log("onEnd:");
-              },
-            });
-            utterance.play();
-            setSpeak(true);
-          }
-        } catch (e) {
-          console.log("errrrrrrr:", e);
-          setSpeak(false);
-        }
-        if (speekNumber.current == 5) {
-          speekNumber.current = 1;
-        } else {
-          speekNumber.current = speekNumber.current + 1;
-        }
-        speekNumber.current = 2;
-      },
-      (err) => {
-        console.error("錯誤：", err);
-      }
+    console.warn(
+      "kkkkkkkkkk 轉audio buffer 時間:",
+      Date.now() - testTime.current
     );
+
+    try {
+      const alignResult = result!.alignResult;
+      const wordSegments = alignResult.flatMap(
+        (item: { start: number; end: number; word: string }, index: number) => {
+          const start = item.start;
+          const end = item.end;
+          const word = item.word;
+          if (
+            index < alignResult.length - 1 &&
+            end != alignResult[index + 1].start
+          ) {
+            return [
+              { start, end, word },
+              {
+                start: end,
+                end: alignResult[index + 1].start,
+                word: ",",
+              },
+            ];
+          } else {
+            return [{ start, end, word }];
+          }
+        }
+      );
+
+      const fullText = wordSegments
+        .map((segment: { word: any }) => segment.word)
+        .join("");
+      console.warn("語音辨識結果物件(原始):", result);
+      console.log("語音辨識結果物件(轉過):", wordSegments);
+
+      if (wordSegments) {
+        // const wordSegments = data.segments[0].words.filter(
+        //   (w: { word: string }) => /[\u4e00-\u9fa5]/.test(w.word)
+        // ); //把標點移除
+
+        const utterance = new VisemeUtterance({
+          audioBuffer: audioBuffer,
+          wordSegments: wordSegments,
+          onViseme: (viseme, word, start, end) => {
+            setDuration(
+              viseme.length > 0
+                ? ((end - start) / viseme.length) * 1000
+                : (end - start) * 1000
+            );
+            setText(word);
+            setViseme(viseme);
+          },
+          onLastViseme: (viseme, word, start, end) => {
+            console.log("onLastViseme:", viseme, word, start, end);
+            setDuration(
+              viseme.length > 0
+                ? ((end - start) / viseme.length) * 1000
+                : (end - start) * 1000
+            );
+            setText(word);
+            setViseme(viseme);
+            if (ttsResultQueue.current.length > 0) {
+              setSpeak(false);
+              runAsrWordAlign();
+            } else {
+              setTimeout(() => {
+                setText("");
+                setViseme([]);
+                stopRecording();
+              }, 500);
+            }
+          },
+          onEnd: () => {
+            console.log("onEnd:");
+          },
+        });
+        utterance.play();
+        setSpeak(true);
+      }
+    } catch (e) {
+      console.log("errrrrrrr:", e);
+      setSpeak(false);
+    }
+
+    // testTime.current = Date.now();
+    // aligner.align(
+    //   audioBuffer,
+    //   text,
+    //   (result) => {
+    //     console.warn("kkkkkkkkkk ASR 時間:", Date.now() - testTime.current);
+    //     console.log("對齊結果：", result);
+    //     try {
+    //       const wordSegments = result.flatMap(
+    //         (
+    //           item: { start: number; end: number; word: string },
+    //           index: number
+    //         ) => {
+    //           const start = item.start;
+    //           const end = item.end;
+    //           const word = item.word;
+    //           if (index < result.length - 1 && end != result[index + 1].start) {
+    //             return [
+    //               { start, end, word },
+    //               {
+    //                 start: end,
+    //                 end: result[index + 1].start,
+    //                 word: ",",
+    //               },
+    //             ];
+    //           } else {
+    //             return [{ start, end, word }];
+    //           }
+    //         }
+    //       );
+
+    //       const fullText = wordSegments
+    //         .map((segment: { word: any }) => segment.word)
+    //         .join("");
+    //       console.warn("語音辨識結果物件(原始):", result);
+    //       console.log("語音辨識結果物件(轉過):", wordSegments);
+
+    //       if (wordSegments) {
+    //         // const wordSegments = data.segments[0].words.filter(
+    //         //   (w: { word: string }) => /[\u4e00-\u9fa5]/.test(w.word)
+    //         // ); //把標點移除
+
+    //         const utterance = new VisemeUtterance({
+    //           audioBuffer: audioBuffer,
+    //           wordSegments: wordSegments,
+    //           onViseme: (viseme, word, start, end) => {
+    //             setDuration(
+    //               viseme.length > 0
+    //                 ? ((end - start) / viseme.length) * 1000
+    //                 : (end - start) * 1000
+    //             );
+    //             setText(word);
+    //             setViseme(viseme);
+    //           },
+    //           onLastViseme: (viseme, word, start, end) => {
+    //             console.log("onLastViseme:", viseme, word, start, end);
+    //             setDuration(
+    //               viseme.length > 0
+    //                 ? ((end - start) / viseme.length) * 1000
+    //                 : (end - start) * 1000
+    //             );
+    //             setText(word);
+    //             setViseme(viseme);
+    //             setTimeout(() => {
+    //               setText("");
+    //               setViseme([]);
+    //               stopRecording();
+    //             }, 500);
+    //           },
+    //           onEnd: () => {
+    //             console.log("onEnd:");
+    //           },
+    //         });
+    //         utterance.play();
+    //         setSpeak(true);
+    //       }
+    //     } catch (e) {
+    //       console.log("errrrrrrr:", e);
+    //       setSpeak(false);
+    //     }
+    //     if (speekNumber.current == 5) {
+    //       speekNumber.current = 1;
+    //     } else {
+    //       speekNumber.current = speekNumber.current + 1;
+    //     }
+    //     speekNumber.current = 2;
+    //   },
+    //   result!.alignResult,
+    //   (err) => {
+    //     console.error("錯誤：", err);
+    //   }
+    // );
   }
 
   useEffect(() => {
-    if (ttsAudio.length > 0 && ttsSentence.length > 0) {
-      runAsrWordAlign(ttsAudio, ttsSentence);
+    if (ttsResult != null) {
+      ttsResultQueue.current.push(ttsResult);
+      runAsrWordAlign();
     }
-  }, [ttsAudio, ttsSentence]);
+  }, [ttsResult]);
 
   const startRecording = async () => {
     const record_para = "record_newMed_dictation"; //// **全時收音參數**  "record_dictation_use4lang"
@@ -320,12 +408,15 @@ const A2F: React.FC = () => {
         {subTitle}
       </div>
       <div className="p-4">
-        <button
-          className="px-4 py-2 bg-blue-500 text-white rounded"
-          onClick={isRecording ? stopRecording : startRecording}
-        >
-          {isRecording ? "分析中....." : "開始ASR"}
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            className="px-4 py-2 bg-blue-500 text-white rounded"
+            onClick={isRecording ? stopRecording : startRecording}
+          >
+            {isRecording ? "分析中....." : "開始ASR"}
+          </button>
+        </div>
+
         <div className="mt-4 p-4 border rounded bg-gray-100 text-black whitespace-pre-wrap">
           {recognitionResult}
         </div>

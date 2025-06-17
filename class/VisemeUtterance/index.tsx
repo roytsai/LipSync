@@ -59,12 +59,19 @@ export class VisemeUtterance {
     const blob = new Blob([audioBuffer], { type: "audio/wav" });
     const url = URL.createObjectURL(blob);
     this.audio = new Audio(url);
+    this.audio.addEventListener("loadedmetadata", () => {
+      console.warn(
+        "kkkkkkkkkk Audio duration:",
+        this.audio.duration,
+        "seconds"
+      );
+    });
     this.audio.onended = () => {
       this.stopLoop();
-      onEnd?.();
     };
     this.audio.onended = () => {
       URL.revokeObjectURL(url);
+      onEnd?.();
     };
     this.onViseme = onViseme;
     this.onLastViseme = onLastViseme;

@@ -5,11 +5,23 @@ import { useEffect, useRef, useState } from "react";
 type MediaSuccessCallback = (stream: MediaStream) => void;
 type MediaErrorCallback = (error: any) => void;
 
+export type AlignResultItem = {
+  word: string;
+  start: number;
+  end: number;
+};
+
+export type TTSresultItem = {
+  ttsAudio: string[];
+  ttsSentence: string;
+  alignResult: AlignResultItem[];
+};
+
 export function useSpeechRecognition() {
   const sequence = process.env.NEXT_PUBLIC_SEQUENCE;
-  const clientId = process.env.NEXT_PUBLIC_CLIENTID;
+  const clientId = process.env.NEXT_PUBLIC_CLIENTID || "";
   const clientKey = process.env.NEXT_PUBLIC_CLIENTKEY;
-  const authUrl = process.env.NEXT_PUBLIC_AUTH_URL;
+  const authUrl = process.env.NEXT_PUBLIC_AUTH_URL || "";
   const rag_source = process.env.NEXT_PUBLIC_RAG_SOURCE;
   const rag_account = process.env.NEXT_PUBLIC_RAG_ACCOUNT;
 
@@ -19,6 +31,7 @@ export function useSpeechRecognition() {
   const TTS_sentence_tmp_check = useRef("");
   const TTS_sentence_tmp = useRef("");
   const TTS_audio_temp = useRef<string[]>([]);
+  const is_TTS_audio_done = useRef<boolean>(false);
 
   const [isRecording, setIsRecording] = useState(false);
 
@@ -26,11 +39,11 @@ export function useSpeechRecognition() {
   const [token, setToken] = useState<{ token: any; clientid: string } | null>(
     null
   );
+
   const [connectStatus, setConnectStatus] = useState(false);
   const [recognitionResult, setRecognitionResult] = useState("");
 
-  const [ttsSentence, setTtsSentence] = useState("");
-  const [ttsAudio, setTtsAudio] = useState<string[]>([]);
+  const [ttsResult, setTTtsResult] = useState<TTSresultItem | null>(null);
 
   const mediaConstraints: MediaStreamConstraints = {
     audio: {
@@ -41,27 +54,6 @@ export function useSpeechRecognition() {
       googNoiseSuppression: false,
     },
   } as any;
-
-  function createUniqueTimeout() {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    return {
-      set(callback: () => void, delay: number) {
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
-        }
-        timeoutId = setTimeout(callback, delay);
-      },
-      cancel() {
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
-      },
-    };
-  }
-
-  const myTimeout = createUniqueTimeout();
 
   async function getToken() {
     try {
@@ -90,6 +82,7 @@ export function useSpeechRecognition() {
         token: resultJson.granted_privileges.ds,
         clientid: clientId,
       };
+
       setToken(responseToken);
     } catch (error) {
       console.error("no token:", error);
@@ -113,51 +106,24 @@ export function useSpeechRecognition() {
       var partial = result["result"];
       var isFinal = result["isFinal"];
       setRecognitionResult(partial);
-      if (isFinal == true) {
-        //result_tmp = result_tmp + partial;
-      } else {
-        // $final.html(result_tmp + partial);
-      }
     }
     if (key.includes("status")) {
       if (result["status"] == "VAD_onEndOfSpeech") {
         console.log("!!!in VAD_onEndOfSpeech");
-        // document.querySelector("#stop").click();
       } //VAD_onEndOfSpeech
       else if (result["status"] == "FinishRecognition") {
         console.log("kkkkkkkkkk !!!in VAD_onEndOfSpeech");
-        // setTtsSentence(TTS_sentence_tmp.current);
-        // setTtsAudio(TTS_audio_temp.current);
-        // TTS_audio_temp.current = [];
-        // TTS_sentence_tmp.current = "";
-        // document.querySelector("#stop").click();
       }
     }
     if (key.includes("error_code")) {
-      if (result["error_code"] != "10109") {
-        //document.querySelector("#stop").click();
-        // document.getElementById("status_block").innerHTML =
-        //   "error code = " +
-        //   result["error_code"] +
-        //   " message = " +
-        //result["message"];
-      } else {
-        // document.getElementById("status_block").innerHTML =
-        //   "持續收音中....  " +
-        //   "error code = " +
-        //   result["error_code"] +
-        //   " message = " +
-        //   result["message"];
-      }
       console.log("error_code", result["error_code"] + result["message"]);
     }
     if (key.includes("tts_sentence")) {
-      myTimeout.cancel();
       //**處理LLM回復**
       console.log("kkkkkkkkkk 🎧 收到 TTS audio:", result.tts_sentence);
       console.log("kkkkkkkkkk response_id--->", result.response_id);
-      //$statusBlock.html("播放TTS").css("color", "white");
       if (!tmp_response_id.current.includes(result.response_id)) {
+        is_TTS_audio_done.current = false;
         TTS_sentence_tmp_check.current = result.tts_sentence;
         if (TTS_sentence_tmp.current != "") {
           TTS_sentence_tmp.current =
@@ -171,49 +137,36 @@ export function useSpeechRecognition() {
           TTS_sentence_tmp.current =
             TTS_sentence_tmp.current + result.tts_sentence;
         }
+        if (result.index == result.total) {
+          is_TTS_audio_done.current = true;
+        }
       }
-      // TTS_sentence_tmp.current = TTS_sentence_tmp.current.replace(
-      //   /\[(\w+)\]/g,
-      //   (match, p1) => emojiMap[p1] || match
-      // );
-
-      //setTtsSentence(result.tts_sentence);
 
       if (!tmp_response_id.current.includes(result.response_id)) {
         tmp_response_id.current = result.response_id;
         service?.send("EEND__" + tmp_response_id); //**說話插斷功能**
-        //TTS_audio_temp.current = [];
       }
       TTS_audio_temp.current.push(result.tts_audio);
-      myTimeout.set(() => {
+      if (is_TTS_audio_done.current) {
         console.log("kkkkkkkkkk TTS end");
         stopRecord();
-        setTtsSentence(TTS_sentence_tmp.current);
-        setTtsAudio(TTS_audio_temp.current);
+        const TTS_sentence = TTS_sentence_tmp.current;
+        const TTS_audio = TTS_audio_temp.current;
         TTS_audio_temp.current = [];
         TTS_sentence_tmp.current = "";
-      }, 300);
-      //setTtsAudio(result.tts_audio);
-      //enqueueTTS(result.tts_audio); //播放TTS
+        is_TTS_audio_done.current = false;
+        setTTtsResult({
+          ttsAudio: TTS_audio,
+          ttsSentence: TTS_sentence,
+          alignResult: result.align_result,
+        });
+      }
     }
     if (key.includes("tts_stop")) {
       //**處理說話插斷tts停止播放**
       console.log(
         "[Kakaya_debug]tts_stop：中斷播放並清空 queue, time=" + new Date()
       );
-      //$statusBlock.html("偵測到人聲...").css("color", "white");
-
-      //if (currentSource) {
-      // try {
-      //   //currentSource.stop();
-      //   console.log("⏹ [Kakaya_debug]停止目前播放的音訊, time=" + new Date());
-      // } catch (e) {
-      //   console.warn("⛔️ 停止播放錯誤（可能已播放完）", e);
-      // }
-      //}
-
-      //ttsQueue = [];
-      //isPlaying = false;
     }
   };
 
@@ -235,9 +188,14 @@ export function useSpeechRecognition() {
   };
 
   useEffect(() => {
+    if (connectStatus) {
+      service?.send("customParam__alignText__on");
+    }
+  }, [connectStatus]);
+
+  useEffect(() => {
     const Service = new speechRecognition(recognition_result, token_result);
     setService(Service);
-    console.log("Service kkkkkkk", Service);
     getToken();
 
     return () => {
@@ -296,11 +254,9 @@ export function useSpeechRecognition() {
 
   const stopRecord = () => {
     console.log("kkkkkkkkkk stopRecord");
-    //if (mediaRecorderRef.current) {
     mediaRecorderRef?.current.stop();
     audioChunksRef.current = [];
     service?.stop_recognition();
-    //}
     setIsRecording(false);
   };
 
@@ -323,9 +279,8 @@ export function useSpeechRecognition() {
   return {
     isRecording,
     recognitionResult,
-    ttsAudio,
-    ttsSentence,
     service,
+    ttsResult,
     startRecord,
     stopRecord,
   };
