@@ -2,7 +2,7 @@
 
 import { dictionary } from 'cmu-pronouncing-dictionary'
 //const cmuDict = dict as Record<string, string[]>;
-const OculusVisemes = [
+export const OculusVisemes = [
   "viseme_sil",
   "viseme_PP",
   "viseme_FF",
@@ -19,9 +19,11 @@ const OculusVisemes = [
   "viseme_O",
   "viseme_U",
 ]
+
+
 // 音素到 viseme 的映射表
 export const phonemeToViseme: Record<string, string> = {
-  neutral: "viseme_sil",
+  neutral: OculusVisemes[0],
   // 'P': 'viseme_PP', 'B': 'viseme_PP', 'M': 'viseme_PP',
   // 'F': 'viseme_FF', 'V': 'viseme_FF',
   // 'TH': 'viseme_TH', 'DH': 'viseme_TH',
@@ -79,14 +81,14 @@ export const phonemeToViseme: Record<string, string> = {
         //console.log(`phonemeSt: ${phonemeSt}`);
         if (!phonemeSt) {
           console.warn(`未找到音標: ${word}`);
-          return ["viseme_sil"]; // fallback to silence
+          return [OculusVisemes[0]]; // fallback to silence
         }
         const phonemes = phonemeSt.split(" ").map(p => p.replace(/[0-9]/g, ""));
   
         return phonemes.map(p => {
           const basePhoneme = p.replace(/[0-9]/g, ""); // 移除重音符號
           //console.warn(`jjjjjjj: ${phonemeToViseme[basePhoneme] ?? "viseme_sil"}`);
-          return phonemeToViseme[basePhoneme] ?? "viseme_sil";
+          return phonemeToViseme[basePhoneme] ?? OculusVisemes[0];
         });
       });
   }

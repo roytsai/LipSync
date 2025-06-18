@@ -14,7 +14,7 @@ const A2F: React.FC = () => {
   const [duration, setDuration] = useState(150);
 
   const [speak, setSpeak] = useState(false);
-  const url = "/models/face5.glb";
+  const url = "/models/asus_boss3.glb";
   const [subTitle, setSubTitle] = useState("");
   const ttsResultQueue = useRef<TTSresultItem[]>([]);
   const boxRef = useRef<HTMLDivElement>(null);

@@ -3,7 +3,11 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { AnimationMixer } from "three";
 import { useRef, useEffect } from "react";
 import * as THREE from "three";
-import { phonemeToViseme, textToVisemes } from "@/utils/phonemeToViseme";
+import {
+  OculusVisemes,
+  phonemeToViseme,
+  textToVisemes,
+} from "@/utils/phonemeToViseme";
 import { textToPinyin } from "@/utils/textToPinyin";
 import { pinyinToArpabet } from "@/utils/pinyinToViseme";
 import { GLTFLoader } from "three-stdlib";
@@ -120,7 +124,7 @@ export default function FaceModel({
   };
 
   useEffect(() => {
-    const head = scene.getObjectByName("Wolf3D_Head") as THREE.Mesh;
+    const head = scene.getObjectByName("AvatarHead") as THREE.Mesh;
     if (head) {
       mesh.current = head;
       morphDict.current = head.morphTargetDictionary || {};
@@ -166,7 +170,7 @@ export default function FaceModel({
         currentViseme.current = filtered; //[firstNonEmpty!];
         currentIndex.current = 0;
       } else {
-        currentViseme.current = ["viseme_sil"];
+        currentViseme.current = [OculusVisemes[0]];
         currentIndex.current = 0;
       }
     } else {
@@ -205,7 +209,7 @@ export default function FaceModel({
       const viseme = currentViseme.current[currentIndex.current];
       const index = morphDict.current[viseme];
       if (index !== undefined) {
-        influences[index] = 0.7 / currentViseme.current.length;
+        influences[index] = 0.8 / currentViseme.current.length;
       } else {
         console.warn(`找不到 viseme "${viseme}" 的 morph target`);
       }
