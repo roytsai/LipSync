@@ -1,4 +1,5 @@
 "use client";
+import { generateSilentAudioBlob } from "@/utils/silentAudio";
 import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 
@@ -15,9 +16,13 @@ export type TTSresultItem = {
   ttsAudio: string[];
   ttsSentence: string;
   alignResult: AlignResultItem[];
+  index: number;
+  total: number;
 };
 
 export function useSpeechRecognition() {
+  const alignMode = 2;
+  const recordRate = 150; //record every 150 mss chunks
   const sequence = process.env.NEXT_PUBLIC_SEQUENCE;
   const clientId = process.env.NEXT_PUBLIC_CLIENTID || "";
   const clientKey = process.env.NEXT_PUBLIC_CLIENTKEY;
@@ -26,14 +31,17 @@ export function useSpeechRecognition() {
   const rag_account = process.env.NEXT_PUBLIC_RAG_ACCOUNT;
 
   const audioChunksRef = useRef<Blob[]>([]);
-  const mediaRecorderRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaStreamRecorder>(null);
+  const mediaStreamRef = useRef<MediaStream>(null);
   const tmp_response_id = useRef("");
   const TTS_sentence_tmp_check = useRef("");
   const TTS_sentence_tmp = useRef("");
   const TTS_audio_temp = useRef<string[]>([]);
   const is_TTS_audio_done = useRef<boolean>(false);
+  const rafId = useRef<number | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
+  const isPauseRecordingRef = useRef(false);
 
   const [service, setService] = useState(null);
   const [token, setToken] = useState<{ token: any; clientid: string } | null>(
@@ -43,7 +51,7 @@ export function useSpeechRecognition() {
   const [connectStatus, setConnectStatus] = useState(false);
   const [recognitionResult, setRecognitionResult] = useState("");
 
-  const [ttsResult, setTTtsResult] = useState<TTSresultItem | null>(null);
+  const [ttsResult, setTTsResult] = useState<TTSresultItem | null>(null);
 
   const mediaConstraints: MediaStreamConstraints = {
     audio: {
@@ -105,7 +113,11 @@ export function useSpeechRecognition() {
     if (key.includes("result")) {
       var partial = result["result"];
       var isFinal = result["isFinal"];
-      setRecognitionResult(partial);
+      if (isFinal) {
+        setRecognitionResult(partial);
+        stopSendSilentLoop();
+        service?.stop_recognition();
+      }
     }
     if (key.includes("status")) {
       if (result["status"] == "VAD_onEndOfSpeech") {
@@ -147,18 +159,23 @@ export function useSpeechRecognition() {
         service?.send("EEND__" + tmp_response_id); //**說話插斷功能**
       }
       TTS_audio_temp.current.push(result.tts_audio);
-      if (is_TTS_audio_done.current) {
-        console.log("kkkkkkkkkk TTS end");
+      if (is_TTS_audio_done.current || alignMode == 2) {
+        console.log(
+          "kkkkkkkkkk TTS end result.tts_sentence",
+          result.tts_sentence
+        );
         stopRecord();
         const TTS_sentence = TTS_sentence_tmp.current;
         const TTS_audio = TTS_audio_temp.current;
         TTS_audio_temp.current = [];
         TTS_sentence_tmp.current = "";
         is_TTS_audio_done.current = false;
-        setTTtsResult({
+        setTTsResult({
           ttsAudio: TTS_audio,
           ttsSentence: TTS_sentence,
           alignResult: result.align_result,
+          index: result.index,
+          total: result.total,
         });
       }
     }
@@ -190,6 +207,7 @@ export function useSpeechRecognition() {
   useEffect(() => {
     if (connectStatus) {
       service?.send("customParam__alignText__on");
+      service?.send(`customParam__alignMode__${alignMode}`);
     }
   }, [connectStatus]);
 
@@ -199,6 +217,7 @@ export function useSpeechRecognition() {
     getToken();
 
     return () => {
+      stopMediaRecorder();
       disconnectService();
     };
   }, []);
@@ -217,6 +236,7 @@ export function useSpeechRecognition() {
   };
 
   function disconnectService() {
+    mediaRecorderRef?.current.stop();
     if (service != null) {
       service.stop_connect();
     }
@@ -227,15 +247,20 @@ export function useSpeechRecognition() {
     onSuccess: MediaSuccessCallback,
     onError: MediaErrorCallback
   ) => {
+    // stopSendSilentLoop();
+    // service?.stop_recognition();
     service?.send("rag_source_" + rag_source); // **上傳rag source參數**
     service?.send("rag_account_" + rag_account); // **上傳rag account參數**
     setRecognitionResult("");
+    //isPauseRecordingRef.current = false;
+
     setTimeout(() => {
       if (!isRecording) {
         captureUserMedia((stream) => {
           handleMediaStream(stream);
           onSuccess(stream);
         }, onError);
+
         setIsRecording(true);
       }
 
@@ -252,27 +277,71 @@ export function useSpeechRecognition() {
     }, 10);
   };
 
+  const stopMediaRecorder = () => {
+    mediaRecorderRef.current?.stop(() => {
+      // Clean up media stream
+      // mediaStreamRef.current
+      //   ?.getTracks()
+      //   .forEach((track: { stop: () => any }) => track.stop());
+      mediaRecorderRef.current = null;
+      mediaStreamRef.current = null;
+    });
+  };
   const stopRecord = () => {
     console.log("kkkkkkkkkk stopRecord");
-    mediaRecorderRef?.current.stop();
-    audioChunksRef.current = [];
-    service?.stop_recognition();
+    stopMediaRecorder();
+    //audioChunksRef.current = [];
+    //isPauseRecordingRef.current = true;
+    startSendSilentLoop();
+    //service?.stop_recognition();
     setIsRecording(false);
   };
 
+  const startSendSilentLoop = () => {
+    if (rafId.current != null) return;
+    const SendSilent = async () => {
+      const silentBlob = await generateSilentAudioBlob(recordRate);
+      audioChunksRef.current.push(silentBlob);
+      service?.sendbuffer(audioChunksRef.current);
+      setTimeout(() => {
+        rafId.current = requestAnimationFrame(SendSilent);
+      }, recordRate);
+    };
+
+    rafId.current = requestAnimationFrame(SendSilent);
+  };
+
+  const stopSendSilentLoop = () => {
+    if (rafId.current != null) {
+      cancelAnimationFrame(rafId.current);
+      rafId.current = null;
+    }
+  };
+
   const handleMediaStream = (stream: MediaStream) => {
-    const mediaRecorder = new MediaStreamRecorder(stream);
+    mediaStreamRef.current = stream;
+    audioChunksRef.current = [];
+    const mediaRecorder = new MediaStreamRecorder(mediaStreamRef.current);
     mediaRecorder.recorderType = StereoAudioRecorder;
     mediaRecorder.mimeType = "audio/wav";
     mediaRecorder.audioChannels = 1;
     mediaRecorder.sampleRate = 48000;
 
-    mediaRecorder.ondataavailable = (blob: Blob) => {
-      audioChunksRef.current.push(blob);
-      service?.sendbuffer(audioChunksRef.current);
+    mediaRecorder.ondataavailable = async (blob: Blob) => {
+      console.log(
+        "kkkkkkkkkk isPauseRecordingRef.current",
+        isPauseRecordingRef.current
+      );
+      if (!isPauseRecordingRef.current) {
+        audioChunksRef.current.push(blob);
+        service?.sendbuffer(audioChunksRef.current);
+      } else {
+        const silentBlob = await generateSilentAudioBlob(recordRate); // 1 秒靜音
+        service?.sendbuffer([silentBlob]);
+      }
     };
 
-    mediaRecorder.start(150);
+    mediaRecorder.start(recordRate);
     mediaRecorderRef.current = mediaRecorder;
   };
 

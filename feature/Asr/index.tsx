@@ -7,8 +7,46 @@ import {
   TTSresultItem,
   useSpeechRecognition,
 } from "@/hooks/useSpeechRecognition";
+import { StreamingVisemeUtterance } from "@/class/StreamingVisemeUtterance";
 
-const A2F: React.FC = () => {
+const ASR: React.FC = () => {
+  const streamer = useRef<StreamingVisemeUtterance>(null);
+  useEffect(() => {
+    streamer.current = new StreamingVisemeUtterance({
+      onViseme: (viseme, word, start, end) => {
+        console.log("kkkkkkkkkk onViseme:", viseme, word, start, end);
+        setDuration(
+          viseme.length > 0
+            ? ((end - start) / viseme.length) * 1000
+            : (end - start) * 1000
+        );
+        setText(word);
+        setViseme(viseme);
+        //setSpeak(true);
+      },
+      onLastViseme: (viseme, word, start, end) => {
+        console.log("kkkkkkkkkk onLastViseme:", viseme, word, start, end);
+        setDuration(
+          viseme.length > 0
+            ? ((end - start) / viseme.length) * 1000
+            : (end - start) * 1000
+        );
+        setText(word);
+        setViseme(viseme);
+      },
+      onEnd: () => {
+        console.log("kkkkkkkkkk 全部播放完畢");
+        setTimeout(() => {
+          setText("");
+          setViseme([]);
+          stopRecording();
+        }, 100);
+      },
+    });
+
+    // append segment 播放等動作
+  }, []);
+
   const [text, setText] = useState("");
   const [viseme, setViseme] = useState<string[]>([]);
   const [duration, setDuration] = useState(150);
@@ -24,6 +62,20 @@ const A2F: React.FC = () => {
   const { isRecording, startRecord, stopRecord, recognitionResult, ttsResult } =
     useSpeechRecognition();
 
+  // 將 base64 string 轉為 ArrayBuffer
+  function base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const cleaned = base64.replace(/[^A-Za-z0-9+/=]/g, "");
+    const padded = cleaned + "=".repeat((4 - (cleaned.length % 4)) % 4);
+    const binaryString = atob(padded);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  /*  
   function audioBufferToWavBlob(audioBuffer: AudioBuffer): Blob {
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
@@ -78,23 +130,15 @@ const A2F: React.FC = () => {
     return new Blob([buffer], { type: "audio/wav" });
   }
 
-  // 將 base64 string 轉為 ArrayBuffer
-  function base64ToArrayBuffer(base64: string): ArrayBuffer {
-    const cleaned = base64.replace(/[^A-Za-z0-9+/=]/g, "");
-    const padded = cleaned + "=".repeat((4 - (cleaned.length % 4)) % 4);
-    const binaryString = atob(padded);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
-  }
-
   // 合併 AudioBuffer
-  async function mergeAudioChunks(base64Chunks: string[]): Promise<Blob> {
+  async function mergeAudioChunks(
+    base64Chunks: string[]
+  ): Promise<ArrayBuffer> {
     const audioCtx = new (window.AudioContext ||
       (window as any).webkitAudioContext)();
+    if (base64Chunks.length == 1) {
+      return base64ToArrayBuffer(base64Chunks[0]);
+    }
     const decodedBuffers: AudioBuffer[] = [];
 
     for (const base64 of base64Chunks) {
@@ -144,7 +188,7 @@ const A2F: React.FC = () => {
       }
     }
 
-    return audioBufferToWavBlob(output);
+    return audioBufferToWavBlob(output).arrayBuffer();
   }
 
   async function runAsrWordAlign() {
@@ -154,10 +198,10 @@ const A2F: React.FC = () => {
     const result = ttsResultQueue.current.shift();
     testTime.current = Date.now();
 
-    const blob = await mergeAudioChunks(result!.ttsAudio);
-    const url = URL.createObjectURL(blob);
+    //const blob = await mergeAudioChunks(result!.ttsAudio);
+    //const url = URL.createObjectURL(blob);
 
-    const audioBuffer = await blob.arrayBuffer();
+    const audioBuffer = await mergeAudioChunks(result!.ttsAudio);
     console.warn(
       "kkkkkkkkkk 轉audio buffer 時間:",
       Date.now() - testTime.current
@@ -191,8 +235,8 @@ const A2F: React.FC = () => {
       const fullText = wordSegments
         .map((segment: { word: any }) => segment.word)
         .join("");
-      console.warn("語音辨識結果物件(原始):", result);
-      console.log("語音辨識結果物件(轉過):", wordSegments);
+      console.warn("kkkkkkkkkk 語音辨識結果物件(原始):", result);
+      console.log("kkkkkkkkkk 語音辨識結果物件(轉過):", wordSegments);
 
       if (wordSegments) {
         // const wordSegments = data.segments[0].words.filter(
@@ -212,7 +256,7 @@ const A2F: React.FC = () => {
             setViseme(viseme);
           },
           onLastViseme: (viseme, word, start, end) => {
-            console.log("onLastViseme:", viseme, word, start, end);
+            console.log("kkkkkkkkkk onLastViseme:", viseme, word, start, end);
             setDuration(
               viseme.length > 0
                 ? ((end - start) / viseme.length) * 1000
@@ -232,7 +276,17 @@ const A2F: React.FC = () => {
             }
           },
           onEnd: () => {
-            console.log("onEnd:");
+            console.log("kkkkkkkkkk onEnd:");
+            if (ttsResultQueue.current.length > 0) {
+              setSpeak(false);
+              runAsrWordAlign();
+            } else {
+              setTimeout(() => {
+                setText("");
+                setViseme([]);
+                stopRecording();
+              }, 500);
+            }
           },
         });
         utterance.play();
@@ -336,11 +390,48 @@ const A2F: React.FC = () => {
     //   }
     // );
   }
-
+  */
   useEffect(() => {
     if (ttsResult != null) {
       ttsResultQueue.current.push(ttsResult);
-      runAsrWordAlign();
+      //runAsrWordAlign();
+
+      const wordSegments = ttsResult.alignResult.flatMap(
+        (item: { start: number; end: number; word: string }, index: number) => {
+          const start = item.start;
+          const end = item.end;
+          const word = item.word;
+          if (
+            index < ttsResult.alignResult.length - 1 &&
+            end != ttsResult.alignResult[index + 1].start
+          ) {
+            return [
+              { start, end, word },
+              {
+                start: end,
+                end: ttsResult.alignResult[index + 1].start,
+                word: ",",
+              },
+            ];
+          } else {
+            return [{ start, end, word }];
+          }
+        }
+      );
+      if (streamer.current != null) {
+        console.warn(
+          "kkkkkkkkkk 語音辨識結果物件(原始):",
+          ttsResult.alignResult
+        );
+        console.log("kkkkkkkkkk 語音辨識結果物件(轉過):", wordSegments);
+        setSpeak(true);
+        streamer.current.appendSegment({
+          audioBuffer: base64ToArrayBuffer(ttsResult.ttsAudio[0]),
+          wordSegments: wordSegments,
+          index: ttsResult.index,
+          total: ttsResult.total,
+        });
+      }
     }
   }, [ttsResult]);
 
@@ -425,4 +516,4 @@ const A2F: React.FC = () => {
   );
 };
 
-export default A2F;
+export default ASR;
